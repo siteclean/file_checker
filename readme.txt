@@ -68,6 +68,8 @@ Also this plugins lets you create/restore your own file/database backups.
 == Changelog ==
 
 Changelog:
+0.41:
+- some parametr checks added, fixed possible errors (wrong pathes, incorrect variables etc)
 
 0.4:
 - now plugin can create file`s and database backups, using nix commands tar/mysqldump. Creating dumps with Windows based servers is not supported.
