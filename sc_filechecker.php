@@ -3,7 +3,7 @@
 Plugin Name: SC file checker
 Plugin URI: https://siteclean.pro/file-checker-%d0%b4%d0%bb%d1%8f-wordpress/
 Description: Plugin for monitoring files integrity by checking its md5 sum; creating, managing file and database backups
-Version: 0.41
+Version: 0.42
 Author: siteclean
 Author URI: https://siteclean.pro
 */
