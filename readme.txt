@@ -68,6 +68,10 @@ Also this plugins lets you create/restore your own file/database backups.
 == Changelog ==
 
 Changelog:
+0.42:
+- removed direct including of core files. Created settings_cache.php, which contains needed settings for script and lets reduce the number of queries to the database
+- some minor function changes
+
 0.41:
 - some parametr checks added, fixed possible errors (wrong pathes, incorrect variables etc)
 
