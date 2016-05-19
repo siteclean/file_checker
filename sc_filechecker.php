@@ -56,7 +56,7 @@ if (!defined('ABSPATH'))
 
 set_time_limit(0);
 
-define('SC_filechecker_version', '0.41');
+define('SC_filechecker_version', '0.42');
 define('SC_file_checker_dir', plugin_dir_path(__FILE__)) ;
 define('SC_file_checker_url', plugin_dir_url(__FILE__));
 if(file_exists(SC_file_checker_dir.'includes/functions.php'))
