@@ -1,14 +1,13 @@
 <?php
 /*
-Plugin Name: SC file checker
-Plugin URI: https://siteclean.pro/file-checker-%d0%b4%d0%bb%d1%8f-wordpress/
-Description: Plugin for monitoring files integrity by checking its md5 sum; creating, managing file and database backups
-Version: 0.42
+Plugin Name: SC filechecker
+Plugin URI: https://siteclean.pro/wordpress-file_checker/
+Description: Control your site`s files integrity, create and manage backups.
+Version: 0.5
 Author: siteclean
 Author URI: https://siteclean.pro
-*/
 
-/*  Copyright 2016  siteclean.pro  (email: mail@siteclean.pro)
+	Copyright 2016  https://siteclean.pro  (email: mail@siteclean.pro)
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -25,27 +24,6 @@ Author URI: https://siteclean.pro
     Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 */
 
-// including main variables to avoid useless DB requests and to be able launch scrip via cron
-// file is creating while installing the plugin and renewing while updating settings (function SC_filechecker_cache_settings() )
-
-if(file_exists('settings_cache.php'))
-	include_once('settings_cache.php');
-
-
-// password for plugin, lets launch it from cron job or change settings via admin panel (wp-admin)
-define('SC_file_checker_password', 'your_pass');
-
-
-// this block lets you launch checking using cron job. For fully functionality we need to include wp-blog-header.php directly.
-
-if(isset($_GET['check']) and isset($_GET['pass']) and $_GET['pass'] == SC_file_checker_password)
-{
-	include_once('includes/functions.php');
-	SC_filechecker_auto_check($cache_path, $cache_filechecker_save_dir.'/FC.datafile');
-	exit();	
-}
-
-
 
 if (!defined('ABSPATH')) 
 {
@@ -54,46 +32,50 @@ if (!defined('ABSPATH'))
 	die();
 }
 
-set_time_limit(0);
 
-define('SC_filechecker_version', '0.42');
+
+
+define('SC_filechecker_version', '0.5');
 define('SC_file_checker_dir', plugin_dir_path(__FILE__)) ;
 define('SC_file_checker_url', plugin_dir_url(__FILE__));
+
 if(file_exists(SC_file_checker_dir.'includes/functions.php'))
 {
 	require_once(SC_file_checker_dir.'includes/functions.php');	
 }
-if(file_exists(SC_file_checker_dir.'settings_cache.php'))
-	include_once(SC_file_checker_dir.'settings_cache.php');
-
-define('SC_file_checker_dir', SC_filechecker_clear_dir_path(SC_file_checker_dir) );
 
 
-
-global $wpdb;
-//$wpdb->show_errors();
-
-$path = $cache_path;
-$path_for_backups = esc_textarea(get_option('filechecker_path_for_backup'));
-$data_file = $cache_data_file;
-
-
-
-// Hook for adding admin menus
-add_action('admin_menu', 'file_checker');
-
-// action function for above hook
-function file_checker() 
-{    
-	add_menu_page('FC page', 'File checker', 10, 'FC_main', 'SC_filechecker_main');
-	add_submenu_page('FC_main', 'Settings', 'Settings', 10, 'FC_settings', 'SC_filechecker_settings');
-	add_submenu_page('FC_main', 'Settings', 'FC_backup', 10, 'FC_backup', 'SC_filechecker_backup');
+if(file_exists(SC_file_checker_dir.'cache/settings_cache.php'))
+{
+	include_once(SC_file_checker_dir.'cache/settings_cache.php');
+	$path = $cache_path;
+	$path_for_backups = esc_textarea(get_option('filechecker_path_for_backup'));
+	$data_file = $cache_data_file;
+}
+else
+{
+	SC_filechecker_cache_settings();
 }
 
- //////////////////////////////////////////// page=FC_main
+	
+// Hook for adding admin menus
+add_action('admin_menu', 'SC_filechecker_file_checker');
+
+// action function for above hook
+function SC_filechecker_file_checker() 
+{    
+	add_menu_page('SC main page', 'SC filechecker', 'administrator', 'SC_main', 'SC_filechecker_main');
+	add_submenu_page('SC_main', 'Settings', 'Settings', 'administrator', 'SC_settings', 'SC_filechecker_settings');
+	add_submenu_page('SC_main', 'Backup page', 'Manage backups', 'administrator', 'SC_backup', 'SC_filechecker_backup');	
+	wp_enqueue_style('style', SC_file_checker_url.'/assets/css/style.css' );
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////// page=SC_main
 function SC_filechecker_main()
 {
 	global $wpdb, $path, $data_file;
+
+	$current_cron_jobs = _get_cron_array();
 	
 		
     if(isset($_POST['manual']) and wp_verify_nonce($_POST['_wpnonce'],'manual_action') )
@@ -104,12 +86,12 @@ function SC_filechecker_main()
 		$new_files = SC_filechecker_search_for_new_files($data_file, $path);
 		if(count($new_files) > 0){
 
-			echo "<h3>Found ".count($new_files)." new/changed files:</h3><br />";
+			echo "<h3><div id=\"message\" class=\"updated notice is-dismissible\">Found ".count($new_files)." new/changed files:</div></h3><br />";
 			foreach ($new_files as $new_file){
 				echo $new_file."<br />";
 			}
 			echo "<br />";
-		} else {echo "<i>No new/changed files found</i><br /><br /><br />";}
+		} else {echo "<div id=\"message\" class=\"updated notice is-dismissible\"><i>No new/changed files found</i></div><br /><br /><br />";}
 
 			
 		if(count($new_files) > 0 or count($changed) > 0){
@@ -119,29 +101,47 @@ function SC_filechecker_main()
 
 	}
 	
+	if(isset($_POST['set_freq']) and wp_verify_nonce($_POST['_wpnonce'],'set_freq'))
+	{
+
+		$freq = intval($_POST['select_cron_freq']);
+		if($freq == 1 or $freq == 2 or $freq == 24)
+		{	
+			SC_filechecker_set_cron($freq);			
+		}	
+					
+	}
+
+
+
+
 	include_once(SC_file_checker_dir.'includes/html.php');
 
 }
 
-////////////////////////////////////////////////////////// page=FC_settings
+/////////////////////////////////////////////////////////////////////////////////////////// page=SC_main end
+
+/////////////////////////////////////////////////////////////////////////////////////////// page=SC_settings
 function SC_filechecker_settings() 
 {
-	
-    global $wpdb, $path, $data_file, $cache_mail;
+		
+    global $wpdb, $path, $data_file, $cache_mail, $cache_path;
+
+    $mail = esc_textarea(get_option('filechecker_email'));
+	$subj = "Report from ".$_SERVER['HTTP_HOST']." - settings changed";
     
     // updating email
-	if(isset($_POST['update']) and !empty($_POST['email']) and SC_filechecker_check_password($_POST['FC_password']) !== FALSE and wp_verify_nonce($_POST['_wpnonce'],'update_settings') )
+	if(isset($_POST['update']) and !empty($_POST['email']) and SC_filechecker_check_password($_POST['FC_password2']) !== FALSE and wp_verify_nonce($_POST['_wpnonce'],'update_settings') )
 	{
 		
 		
 			if(filter_var($_POST['email'], FILTER_VALIDATE_EMAIL))
 			{
-				$mail = esc_textarea(get_option('filechecker_email'));
-	    		$subj = "Report from ".$_SERVER['HTTP_HOST']." - settings changed";
+				
 	    		$message = "Email was changed by user with IP = ".$_SERVER['REMOTE_ADDR'].", using browser ".esc_textarea($_SERVER['HTTP_USER_AGENT']);
 	    		mail($mail, $subj, $message);
-
-				update_option('filechecker_email', $_POST['email']);
+				
+				update_option('filechecker_email', sanitize_email($_POST['email']));
 				SC_filechecker_cache_settings();
 
 			} else {echo "<script>alert('Email format incorrect')</script>";}	
@@ -150,7 +150,7 @@ function SC_filechecker_settings()
 	}
 
 	// updating directory to scan
-	if(isset($_POST['update']) and !empty($_POST['scan_dir']) and SC_filechecker_check_password($_POST['FC_password']) !== FALSE 
+	if(isset($_POST['update']) and !empty($_POST['scan_dir']) and SC_filechecker_check_password($_POST['FC_password2']) !== FALSE 
 		and wp_verify_nonce($_POST['_wpnonce'],'update_settings') )
 	{
 
@@ -160,8 +160,7 @@ function SC_filechecker_settings()
 				if(!empty($scan_dir))
 				{
 					update_option('filechecker_scan_dir', $scan_dir);
-					$mail = esc_textarea(get_option('filechecker_email'));
-	    			$subj = "Report from ".$_SERVER['HTTP_HOST']." - settings changed";
+					
 	    			$message = "Filechecker scan dir was changed by user with IP = ".$_SERVER['REMOTE_ADDR'].", using browser ".esc_textarea($_SERVER['HTTP_USER_AGENT']);
 	    			mail($mail, $subj, $message);
 	    			SC_filechecker_cache_settings();
@@ -179,7 +178,7 @@ function SC_filechecker_settings()
 	}
 
 	// updating data file dir
-	if(isset($_POST['update']) and !empty($_POST['dir']) and SC_filechecker_check_password($_POST['FC_password']) !== FALSE and wp_verify_nonce($_POST['_wpnonce'],'update_settings') )
+	if(isset($_POST['update']) and !empty($_POST['dir']) and SC_filechecker_check_password($_POST['FC_password2']) !== FALSE and wp_verify_nonce($_POST['_wpnonce'],'update_settings') )
 	{
 		
 		
@@ -188,8 +187,7 @@ function SC_filechecker_settings()
 				if(!empty($dir) and is_writable($dir) )
 				{
 					update_option('filechecker_save_dir', $dir);			
-					$mail = esc_textarea(get_option('filechecker_email'));
-		    		$subj = "Report from ".$_SERVER['HTTP_HOST']." - settings changed";
+					
 		    		$message = "Filechecker directory was changed by user with IP = ".$_SERVER['REMOTE_ADDR'].", using browser ".esc_textarea($_SERVER['HTTP_USER_AGENT']);
 		    		SC_filechecker_cache_settings();
 		    		mail($mail, $subj, $message);		
@@ -206,7 +204,7 @@ function SC_filechecker_settings()
 	}
 
 	// updating frequency
-	if(isset($_POST['update']) and !empty($_POST['freq']) and SC_filechecker_check_password($_POST['FC_password']) !== FALSE and wp_verify_nonce($_POST['_wpnonce'],'update_settings') )
+	if(isset($_POST['update']) and !empty($_POST['freq']) and SC_filechecker_check_password($_POST['FC_password2']) !== FALSE and wp_verify_nonce($_POST['_wpnonce'],'update_settings') )
 	{
 		
 		
@@ -214,8 +212,7 @@ function SC_filechecker_settings()
 			if($freq < 25 and $freq > 0)
 			{
 				update_option('filechecker_freq', $freq);
-				$mail = esc_textarea(get_option('filechecker_email'));
-				$subj = "Report from ".$_SERVER['HTTP_HOST']." - settings changed";
+				
 			    $message = "Scan frequency was changed by user with IP = ".$_SERVER['REMOTE_ADDR'].", using browser ".esc_textarea($_SERVER['HTTP_USER_AGENT']);
 			    SC_filechecker_cache_settings();
 			    mail($mail, $subj, $message);	
@@ -231,7 +228,7 @@ function SC_filechecker_settings()
 	}
 
 	// updating files to be excluded from scan
-	if(isset($_POST['update']) and !empty($_POST['files_to_exclude']) and SC_filechecker_check_password($_POST['FC_password']) !== FALSE 
+	if(isset($_POST['update']) and !empty($_POST['files_to_exclude']) and SC_filechecker_check_password($_POST['FC_password2']) !== FALSE 
 		and wp_verify_nonce($_POST['_wpnonce'],'update_settings') )
 	{	
 		
@@ -255,8 +252,7 @@ function SC_filechecker_settings()
 				}
 				
 				update_option('filechecker_files_to_exclude', $files);	
-				$mail = esc_textarea(get_option('filechecker_email'));
-				$subj = "Report from ".$_SERVER['HTTP_HOST']." - settings changed";
+				
 			    $message = "Files to exlcude were changed by user with IP = ".$_SERVER['REMOTE_ADDR'].", using browser ".$_SERVER['HTTP_USER_AGENT'];
 			    SC_filechecker_cache_settings();
 			    mail($mail, $subj, $message);		
@@ -269,14 +265,13 @@ function SC_filechecker_settings()
 
 
 	// updating extensions to scan
-	if(isset($_POST['update']) and !empty($_POST['extensions']) and SC_filechecker_check_password($_POST['FC_password']) !== FALSE 
+	if(isset($_POST['update']) and !empty($_POST['extensions']) and SC_filechecker_check_password($_POST['FC_password2']) !== FALSE 
 		and wp_verify_nonce($_POST['_wpnonce'],'update_settings') )
 	{
 		
 		$extensions = trim(htmlspecialchars($wpdb->_real_escape($_POST['extensions'])));
 		update_option('filechecker_extensions_to_scan', $extensions);
-		$mail = esc_textarea(get_option('filechecker_email'));
-		$subj = "Report from ".$_SERVER['HTTP_HOST']." - settings changed";
+		
 		$message = "Extensions to check were changed by user with IP = ".$_SERVER['REMOTE_ADDR'].", using browser ".esc_textarea($_SERVER['HTTP_USER_AGENT']);
 		SC_filechecker_cache_settings();
 		mail($mail, $subj, $message);
@@ -286,15 +281,14 @@ function SC_filechecker_settings()
 
 
 	// updating dirs_to_exclude
-	if(isset($_POST['update']) and !empty($_POST['dirs_to_exclude']) and SC_filechecker_check_password($_POST['FC_password']) !== FALSE 
+	if(isset($_POST['update']) and !empty($_POST['dirs_to_exclude']) and SC_filechecker_check_password($_POST['FC_password2']) !== FALSE 
 		and wp_verify_nonce($_POST['_wpnonce'],'update_settings') )
 	{
 		
 		$dir = SC_filechecker_clear_dir_path($_POST['dirs_to_exclude']);
 		update_option('filechecker_dirs_to_exclude', $dir);
-		$mail = esc_textarea(get_option('filechecker_email'));
-		$subj = "Report from ".$_SERVER['HTTP_HOST']." - settings changed";
-		$message = "Directories to exclude wew frequency was changed by user with IP = ".$_SERVER['REMOTE_ADDR'].", using browser ".esc_textarea($_SERVER['HTTP_USER_AGENT']);
+		
+		$message = "Directories to exclude was changed by user with IP = ".$_SERVER['REMOTE_ADDR'].", using browser ".esc_textarea($_SERVER['HTTP_USER_AGENT']);
 		SC_filechecker_cache_settings();
 		mail($mail, $subj, $message);
 
@@ -309,8 +303,7 @@ function SC_filechecker_settings()
 	if(isset($_POST['clear_files_to_exclude']) and wp_verify_nonce($_POST['_wpnonce'],'update_settings') )
 	{
 		update_option('filechecker_files_to_exclude', NULL);
-		$mail = esc_textarea(get_option('filechecker_email'));
-		$subj = "Report from ".$_SERVER['HTTP_HOST']." - settings changed";
+		
 		$message = "Files to exclude were changed by user with IP = ".$_SERVER['REMOTE_ADDR'].", using browser ".esc_textarea($_SERVER['HTTP_USER_AGENT']);
 		SC_filechecker_cache_settings();
 		mail($mail, $subj, $message);
@@ -318,20 +311,18 @@ function SC_filechecker_settings()
 
 
 	if(isset($_POST['rescan']) and SC_filechecker_check_password($_POST['FC_password']) !== FALSE and wp_verify_nonce($_POST['_wpnonce'],'update_settings') )
-	{
-		SC_filechecker_check_password($_POST['FC_password']);
-		SC_filechecker_create_data_file($path);
+	{			
+		SC_filechecker_create_data_file($cache_path);
 	}
 
-	include_once(SC_file_checker_dir.'includes/html.php');
-
-	
+	include_once(SC_file_checker_dir.'includes/html.php');	
 
 
-} //////////////////////////////////////////////////////////////end of page=FC_settings
+} 
+//////////////////////////////////////////////////////////////end of page=SC_settings
 
 
-///////////////////////////////////////////////////////////////page=FC_backup
+///////////////////////////////////////////////////////////////page=SC_backup
 
 function SC_filechecker_backup()
 
@@ -360,10 +351,8 @@ function SC_filechecker_backup()
 	if(isset($_POST['file_backup']) and wp_verify_nonce($_POST['_wpnonce'],'create_backup') )
 	{
 		if( is_writable($path_for_backups) )
-		{
-			$start = microtime(true); 
-			SC_filechecker_create_file_backup();
-			echo "<h3>Backuped for ".round((microtime(true) - $start), 2)." seconds</h3>";
+		{			
+			SC_filechecker_create_file_backup();			
 		}
 		else
 		{
@@ -375,9 +364,7 @@ function SC_filechecker_backup()
 	{		
 		if( is_writable($path_for_backups) )
 		{
-			$start = microtime(true); 
-			SC_filechecker_create_mysql_dump();	
-			echo "<h3>Backuped for ".round((microtime(true) - $start), 2)." seconds</h3>";
+			 SC_filechecker_create_mysql_dump();				
 		}
 		else
 		{
@@ -389,10 +376,9 @@ function SC_filechecker_backup()
 	{
 		if( is_writable($path_for_backups) )
 		{
-			$start = microtime(true); 
+			
 			SC_filechecker_create_file_backup();
-			SC_filechecker_create_mysql_dump();	
-			echo "<h3>Backuped for ".round((microtime(true) - $start), 2)." seconds</h3>";
+			SC_filechecker_create_mysql_dump();				
 		}
 		else
 		{
@@ -403,12 +389,12 @@ function SC_filechecker_backup()
 
 	if( isset($_POST['delete_backup_file']) and wp_verify_nonce($_POST['_wpnonce'],'manage_backup') )
     {
-    	//$path_for_backups = stripslashes(esc_textarea(get_option('filechecker_path_for_backup')));        	
+    	        	
     	if( is_file($path_for_backups.$_POST['file_backup_name']) and is_writable($path_for_backups) )
     	{        		
     		if( preg_match('/filebackup/i', $_POST['file_backup_name']) or preg_match('/DBbackup/i', $_POST['file_backup_name']) )
     		{
-    			unlink( $path_for_backups.$_POST['file_backup_name'] );	
+    			unlink( $path_for_backups.sanitize_file_name($_POST['file_backup_name']) );	
     		}
     		else
     		{
@@ -432,12 +418,12 @@ function SC_filechecker_backup()
 			//restoring file`s backup
 			if( is_file( $path_for_backups.$_POST['file_backup_name'] ) and preg_match('/filebackup/i', $_POST['file_backup_name']) )
 			{
-				SC_filechecker_restore_file_backup($path_for_backups.$_POST['file_backup_name']);					
+				SC_filechecker_restore_file_backup($path_for_backups.sanitize_file_name($_POST['file_backup_name']) );					
 			}
 			//restoring DB`s backup
 			if( is_file( $path_for_backups.$_POST['file_backup_name'] ) and preg_match('/DBbackup/i', $_POST['file_backup_name']) )
 			{
-				SC_filechecker_restore_mysql_dump($path_for_backups.$_POST['file_backup_name']);					
+				SC_filechecker_restore_mysql_dump($path_for_backups.sanitize_file_name($_POST['file_backup_name']));					
 			}
 			
 
@@ -454,15 +440,28 @@ function SC_filechecker_backup()
 
 	include_once(SC_file_checker_dir.'includes/html.php');
 
-
-
-
-
-
 }
 
+////////////////////////////////////////////////////////////////////////////////////////// page=SC_backup end
+
+
+////////////////////////////////////////////////////////////////////////////////////////// page cron_settings start
+
+
+
+
+
+
+
+////////////////////////////////////////////////////////////////////////////////////////// page cron_settings end
+
+
+// hook for cron job autocheck
+add_action('start_auto_check', 'SC_filechecker_cron_report');
 
 
 register_activation_hook(__FILE__,'SC_filechecker_install');
 
 register_deactivation_hook( __FILE__, 'SC_filechecker_deinstall' );
+
+
