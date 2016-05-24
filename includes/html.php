@@ -6,11 +6,17 @@ if (!defined('ABSPATH'))
     header('HTTP/1.1 403 Forbidden');
     die();
 }
+
+
+if(!is_writable(SC_file_checker_dir.'/cache/'))
+  {
+    echo "<h2>Please, make ".SC_file_checker_dir."cache/ writable for correct work! </h2>";
+  }
+
+
+
 //main page block
-
-
-
-if(isset($_GET['page']) and $_GET['page'] == 'FC_main')
+if(isset($_GET['page']) and $_GET['page'] == 'SC_main')
 {
     if(!file_exists($data_file)){
         echo "<h4>Base file for check was not found. Please, scan the system (visit settings page)</h4><br />";
@@ -18,16 +24,42 @@ if(isset($_GET['page']) and $_GET['page'] == 'FC_main')
     }
     ?>
     <form action='' method=POST>
-    <b>Manual check </b><input type="submit" name="manual" value="check"></input><br /><br />
+    <b><h4>Manual check for files integrity</h4></b>
+    <p><input class="button-primary" type="submit" name="manual" value="check"></input></p><br /><br />
     <?php wp_nonce_field('manual_action', '_wpnonce'); ?>
     </form>
-    <?php 
+
+    <h4>Set auto launch frequency (automatic integrity checking)</h4>
+    
+    <form action = '' method = 'POST'>
+    <p><input type="radio" name="select_cron_freq" value="1"> Once per day</p>
+    <p><input type="radio" name="select_cron_freq" value="2"> Twice per day</p>
+    <p><input type="radio" name="select_cron_freq" value="24"> Once per hour</p>
+    <p class="submit"><input type="submit" class="button-primary" value="Set frequency" name="set_freq"/></p>
+    <?php wp_nonce_field('set_freq', '_wpnonce'); 
+    echo "</form>";
+    if(wp_next_scheduled( 'start_auto_check' ))
+    {       
+        $next_launch_time = date("H:i:s", wp_next_scheduled( 'start_auto_check' ));
+        $current_time = date("H:i:s");        
+        $when_launch = date ("H:i:s", strtotime ($next_launch_time)-strtotime ($current_time));    
+        echo "<p>Next cron starts at $next_launch_time, after $when_launch</p><br />Current server`s time is $current_time<br />";    
+        
+    }
+    else 
+    {
+        echo "<p><b>Cron job not set. Use form above to set it</b></p>";
+    }
+
+
+
 }
-//end of the main page block
+
+///////////////////////////////////////////////////////////////////////////////////////end of the main page block
 
 
 ///////////////////////////////////////////////////////////////////////////////////////settings page block
-if(isset($_GET['page']) and $_GET['page'] == 'FC_settings')
+if(isset($_GET['page']) and $_GET['page'] == 'SC_settings')
 {
 
     ?>
@@ -35,6 +67,8 @@ if(isset($_GET['page']) and $_GET['page'] == 'FC_settings')
     <h2>Main options for file checker</h2>
 
     <?php 
+    
+
     if(SC_filechecker_check_htaccess() === FALSE)
     {
         $string = "
@@ -50,14 +84,11 @@ if(isset($_GET['page']) and $_GET['page'] == 'FC_settings')
         <?php
     }
     
-
-    ?>
-
-    <link href="<?php echo SC_file_checker_url.'assets/css/'; ?>style.css" rel="stylesheet">
+     ?>
 
     <form action='' method=POST>
 
-    <b>Enter the file_checker password for changes to be applied (not your admin`s pass for site):</b> <br />
+    <b>Enter the plugin`s password to create data file (not your admin`s pass for site):</b> <br />
     <input type="password" size="25" name = "FC_password" > </input><br /><br />
 
 
@@ -66,11 +97,13 @@ if(isset($_GET['page']) and $_GET['page'] == 'FC_settings')
     {
         $t = stat($data_file)['mtime'];
         $time = date('H:i:s d-m-Y', $t);
-        echo '<b>Data file created '.$time.'. <br />Regenerate data file?</b> (fill the "file_checker password" field to continue)<br /><input type="submit" name="rescan" value="regenerate"></input><br />';
+        echo '<b>Data file created '.$time.'.<br />
+            Regenerate data file?</b> (fill the "file_checker password" field to continue)           
+            <p class="submit"><input type="submit" class="button-primary" name="rescan" value="regenerate"></input></p>';
     } 
     else 
     {
-        echo '<b>Create data file? </b><input type="submit" name="rescan" value="create data file"></input><br />';
+        echo '<b>Create data file?<br /> </b><input class="button-primary" type="submit" name="rescan" value="create data file"></input><br />';
     }
     ?>
 
@@ -114,22 +147,14 @@ if(isset($_GET['page']) and $_GET['page'] == 'FC_settings')
                                 }
                                 else
                                 {
-                                    echo "Current path (". esc_textarea(get_option('filechecker_save_dir')).") is not writable, please, change it";
+                                    echo "<b>Current path (". esc_textarea(get_option('filechecker_save_dir')).") is not writable, please, change it</b>";
                                 }
                                  ?>
                                 
                             </td>
                             
                         </tr>
-                        <tr>
-                            <td >
-                                Check frequency per day (1 - 24)
-                            </td>                        
-                            <td>
-                                <?php echo intval(get_option('filechecker_freq')); ?>
-                            </td>
-                            
-                        </tr>
+                       
                         <tr>
                             <td >
                                 Files with these extensions will be scanned
@@ -146,9 +171,11 @@ if(isset($_GET['page']) and $_GET['page'] == 'FC_settings')
                             <td>
                                 <?php echo $f_t_e = esc_textarea(get_option('filechecker_files_to_exclude')); 
                                 if( !empty($f_t_e) )
-                                {
-                                   echo '<br /><input type="submit" name = "clear_files_to_exclude" value = "Clear excluded files?" > </input>';
-
+                                {                                   
+                                    echo '
+                                    <input type="submit" class="button-primary" name="clear_files_to_exclude" value="Clear excluded files?">
+                                    </input>
+                                    ';                                    
                                 }
                                 ?>                            
                             </td>
@@ -159,10 +186,12 @@ if(isset($_GET['page']) and $_GET['page'] == 'FC_settings')
                                 Directories to be excluded from scan
                             </td>                        
                             <td>
-                               <?php echo $d_t_e = esc_textarea(get_option('filechecker_dirs_to_exclude')); 
+                               <?php echo $d_t_e = esc_textarea(get_option('filechecker_dirs_to_exclude'));                                
                                 if( !empty($d_t_e) )
                                 {
-                                    echo '<br /><input type="submit" name = "clear_dirs_to_exclude" value = "Clear excluded dirs?" > </input>';
+                                    echo '<br />
+                                    <input type="submit" class="button-primary" name="clear_dirs_to_exclude" value="Clear excluded dirs?"></input>';
+                                    
                                 }
                                ?>        
                                <br />                  
@@ -178,6 +207,9 @@ if(isset($_GET['page']) and $_GET['page'] == 'FC_settings')
 
 
     <h3>Update settings</h3>
+    <br />
+    <b>Enter the plugin`s password for changes to be applied (not your admin`s pass for site):</b> <br />
+    <input type="password" size="25" name = "FC_password2" > </input><br /><br />
     <br />Enter your email for reports: <input type="text" name = "email" > </input>
     <br /> <br />
     Directory for scan: <input type="text" size="70" name = "scan_dir" > </input><br />
@@ -185,9 +217,7 @@ if(isset($_GET['page']) and $_GET['page'] == 'FC_settings')
 
     Directory for data file to be stored (must be writable for script): <input type="text" size="70" name = "dir" > </input><br />
     <br /><br />
-
-    Check frequency per day (1 - 24): <input type="text" name = "freq" ></input>
-    <br /><br />
+    
 
     Files with these extensions will be scanned: <input type="text" size="70" name = "extensions" > </input><br />
     <i>( Recommended value: <b>php, php3, php4, php5, php6, phps, pl, cgi, shtml, phtml, htaccess, js, html, htm )</b></i><br /><br />
@@ -197,11 +227,9 @@ if(isset($_GET['page']) and $_GET['page'] == 'FC_settings')
 
     Directories to be excluded from scan: <input type="text" size="70" name = "dirs_to_exclude" > </input><br /><br />
 
-    <b>Update settings? (<i>current settings will be overwritten!</i>)</b> <input type="submit" name='update' value="update"></input><br /><br /><br />
+    <b>Update settings? (<i>current settings will be overwritten!</i>)</b> <input class="button-primary" type="submit" name='update' value="update"></input><br /><br /><br />
     <?php
-    if(!file_exists($data_file)){
-            echo "<h4>Base file for check was not found. Please, scan the system</h4><br />";
-        }
+    
     wp_nonce_field('update_settings', '_wpnonce');
     ?>
 
@@ -217,20 +245,20 @@ if(isset($_GET['page']) and $_GET['page'] == 'FC_settings')
 
 
 
-// back page block
+// backup page block
 
-if( isset($_GET['page']) and $_GET['page'] == 'FC_backup' )
+if( isset($_GET['page']) and $_GET['page'] == 'SC_backup' )
 {
 
     global $path_for_backups;
 ?>
    <form action="" method="POST" >
-   <br /> <br /> Current path for backups (use different path of your root_directory for safety): <b><?php echo $path_for_backups; ?></b><br /><br />
+   <br /> <br /> Current path for backups (use directory unaccessible from web for more safety): <b><?php echo $path_for_backups; ?></b><br /><br />
    Path for backups to be stored: <input type="text" size="70" name = "path_for_backups"  value = "" ></input><br /><br />
 
    <b>Enter the file_checker password (not your admin`s pass for site):</b> <input type="password" size="25" name = "FC_password" > </input><br /><br /> 
 
-   <b>Update backup path? (<i>current backups will not be deleted, just move them to new directory</i>)</b> <input type="submit" name='update_path_for_backups' value="set path"></input><br /><br /><br />
+   <b>Update backup path? (<i>current backups will not be deleted, just move them to new directory</i>)</b> <input class="button-primary" type="submit" name='update_path_for_backups' value="set path"></input><br /><br /><br />
    <?php wp_nonce_field('set_backup_path', '_wpnonce'); ?>
    </form>
 
@@ -238,9 +266,9 @@ if( isset($_GET['page']) and $_GET['page'] == 'FC_backup' )
 /////////////////////////////////////////////////// backup block
 ?>
    <form action ="" method = "POST">
-       <input type="submit" name='file_backup' value="Create files backup"></input><br />
-       <input type="submit" name='db_backup' value="Create database backup"></input><br />
-       <input type="submit" name='full_backup' value="Create full (files + DB) backup"></input><br /><br />
+       <input class="button-primary" type="submit" name='file_backup' value="Create files backup"></input><br />
+       <input class="button-primary" type="submit" name='db_backup' value="Create database backup"></input><br />
+       <input class="button-primary" type="submit" name='full_backup' value="Create full (files + DB) backup"></input><br /><br />
        <?php wp_nonce_field('create_backup', '_wpnonce'); ?>
    </form>
 
@@ -300,8 +328,8 @@ if( isset($_GET['page']) and $_GET['page'] == 'FC_backup' )
             }
             ?>
             <form action="" method="POST">
-                <input type="submit" name="delete_backup_file" value="Delete?"> </input>
-                <input type="submit" name="restore_backup_file" value="Restore?"> </input>
+                <input type="submit" class="button-primary" value="Delete?" name="delete_backup_file"/>
+                <input type="submit" class="button-primary" value="Restore?" name="restore_backup_file"/>                
                 <input type="hidden" name="file_backup_name" value="<?php echo $file_backup; ?>" ></input>
                 <?php wp_nonce_field('manage_backup', '_wpnonce'); ?>
             </form>
@@ -345,8 +373,8 @@ if( isset($_GET['page']) and $_GET['page'] == 'FC_backup' )
             
             ?>
             <form action="" method="POST">
-                <input type="submit" name="delete_backup_file" value="Delete?"> </input>
-                <input type="submit" name="restore_backup_file" value="Restore?"> </input>
+                <input type="submit" class="button-primary" value="Delete?" name="delete_backup_file"/>
+                <input type="submit" class="button-primary" value="Restore?" name="restore_backup_file"/>               
                 <input type="hidden" name="file_backup_name" value="<?php echo $db_backup; ?>" ></input>
                 <?php wp_nonce_field('manage_backup', '_wpnonce'); ?>
             </form>
@@ -360,11 +388,14 @@ if( isset($_GET['page']) and $_GET['page'] == 'FC_backup' )
 /////////////////////////////////////////////////// end of backup block
 }
 
+
+
 ?>
 
-
 <div id="footer">
-SC_filechecker plugin, ver <?php echo SC_filechecker_version; ?><br />
+<p><i>SC_filechecker plugin, ver <?php echo SC_filechecker_version; ?></i><br />
 &copy; <a href='https://siteclean.pro' >Created by siteclean.pro</a><br />
+Protect your site</p>
 </div>
+
 <?php exit();
